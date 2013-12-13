@@ -623,7 +623,8 @@ withAttributeAndRelationshipValuesFromManagedObject:(NSManagedObject *)managedOb
     
     if ([self.HTTPClient respondsToSelector:@selector(requestForDeletedObject:)]) {
         for (NSManagedObject *deletedObject in [saveChangesRequest deletedObjects]) {
-            NSManagedObjectID *backingObjectID = [self objectIDForBackingObjectForEntity:[deletedObject entity] withResourceIdentifier:AFResourceIdentifierFromReferenceObject([self referenceObjectForObjectID:deletedObject.objectID])];
+            NSString *resourceIdentifier = AFResourceIdentifierFromReferenceObject([self referenceObjectForObjectID:deletedObject.objectID]);
+            NSManagedObjectID *backingObjectID = [self objectIDForBackingObjectForEntity:[deletedObject entity] withResourceIdentifier:resourceIdentifier];
 
             NSURLRequest *request = [self.HTTPClient requestForDeletedObject:deletedObject];
             if (!request) {
@@ -631,6 +632,13 @@ withAttributeAndRelationshipValuesFromManagedObject:(NSManagedObject *)managedOb
                     NSManagedObject *backingObject = [backingContext existingObjectWithID:backingObjectID error:nil];
                     [backingContext deleteObject:backingObject];
                     [backingContext save:nil];
+                    // Remove deleted object's ID from caches
+                    [context performBlockAndWait:^{
+                        NSManagedObjectID *managedObjectID = [self objectIDForEntity:[deletedObject entity] withResourceIdentifier:resourceIdentifier];
+                        [_backingObjectIDByObjectID removeObjectForKey:managedObjectID];
+                        NSMutableDictionary *objectIDsByResourceIdentifier = [_registeredObjectIDsByEntityNameAndNestedResourceIdentifier objectForKey:deletedObject.entity.name];
+                        [objectIDsByResourceIdentifier removeObjectForKey:resourceIdentifier];
+                    }];
                 }];
                 continue;
             }
